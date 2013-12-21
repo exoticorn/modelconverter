@@ -24,7 +24,7 @@ object Main extends App {
         val c = in(index + 1)
         builder += a
         builder += b
-        builder += math.abs(c)
+        builder += (if(c >= 0) c else -c - 1)
         if (c < 0) index + 2
         else inner(index + 1)
       }
@@ -33,7 +33,7 @@ object Main extends App {
     builder.result()
   }
   val indexList = triangulateFbx(model("PolygonVertexIndex").attributes.asInstanceOf[FbxLongArray].array)
-  val byteBuffer = ByteBuffer.allocate(8 + vertices.size * 4 + indexList.size * 4)
+  val byteBuffer = ByteBuffer.allocate(8 + vertices.size * 4 + indexList.size * 2)
   byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
   byteBuffer.putInt(vertices.size)
   byteBuffer.putInt(indexList.size)
@@ -41,7 +41,7 @@ object Main extends App {
     byteBuffer.putFloat(v.toFloat)
   }
   for (i <- indexList) {
-    byteBuffer.putInt(i.toInt)
+    byteBuffer.putShort(i.toShort)
   }
   Files.write(new File("test.data").toPath(), byteBuffer.array())
 }
