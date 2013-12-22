@@ -3,6 +3,7 @@ package de.exoticorn.modelconverter
 import de.exoticorn.math._
 import scala.collection.immutable._
 import scala.collection.mutable.ArrayBuilder
+import scala.collection.mutable.ArrayBuffer
 
 sealed class VertexAttribute(val size: Int)
 case object VertexAttributePosition extends VertexAttribute(3)
@@ -41,22 +42,71 @@ case class Mesh(data: Map[VertexAttribute, Array[Double]], indices: Array[Int], 
   }
 
   def addPerPolygonVertexAttribute(attr: VertexAttribute, aData: Array[Double], tolerance: Double): Mesh = {
-    val reverseMapping = scala.collection.mutable.Map.empty[Int, Int]
-    for ((i, j) <- indices.zipWithIndex) {
-      reverseMapping += j -> i
-    }
-    val oldData = data map {
-      case (a, d) =>
-        val attrSize = a.size
-        val newD = new Array[Double](reverseMapping.size * a.size)
-        for (i <- 0 until reverseMapping.size) {
-          val base = reverseMapping(i) * attrSize
-          for (j <- 0 until attrSize) {
-            newD(i * attrSize + j) = d(base + j)
+    def reindex: (Int, Array[Int], Array[List[(Int, Int)]]) = {
+      val indicesBuilder = ArrayBuilder.make[Int]
+      val oldToNew = Array.fill(data(VertexAttributePosition).size / 3)(List.empty[(Int, Int)])
+      var nextIndex = 0
+      for (i <- 0 until indices.size) {
+        val oldIndex = indices(i)
+        val mapping = oldToNew(oldIndex)
+        val base = i * attr.size
+        def findBest(list: List[(Int, Int)], tolerance: Double, bestSoFar: List[(Int, Int)]): List[(Int, Int)] = list match {
+          case Nil => bestSoFar
+          case (oldIndex, newIndex) :: xs =>
+            var sum = 0.0
+            val base2 = oldIndex * attr.size
+            for (j <- 0 until attr.size) {
+              val diff = aData(base + j) - aData(base2 + j)
+              sum += diff * diff
+            }
+            if (sum <= tolerance * tolerance)
+              findBest(xs, math.sqrt(sum), list)
+            else findBest(xs, tolerance, bestSoFar)
+        }
+        indicesBuilder += {
+          findBest(mapping, tolerance, Nil) match {
+            case Nil =>
+              val newIndex = nextIndex
+              nextIndex += 1
+              oldToNew(oldIndex) = (i, newIndex) :: mapping
+              newIndex
+            case (_, i) :: _ => i
           }
         }
-        a -> newD
+      }
+      (nextIndex, indicesBuilder.result(), oldToNew)
     }
-    Mesh(oldData + (attr -> aData), (0 until indices.size).toArray, polygons)
+
+    def remapOld(numVertices: Int, oldToNew: Array[List[(Int, Int)]]): Map[VertexAttribute, Array[Double]] =
+      for ((attr, data) <- data) yield {
+        val newData = new Array[Double](numVertices * attr.size)
+        for (i <- 0 until oldToNew.size) {
+          val base = i * attr.size
+          for ((_, dest) <- oldToNew(i)) {
+            val destBase = dest * attr.size
+            for (j <- 0 until attr.size) {
+              newData(destBase + j) = data(base + j)
+            }
+          }
+        }
+        attr -> newData
+      }
+
+    def remapNew(numVertices: Int, oldToNew: Array[List[(Int, Int)]]): Array[Double] = {
+      val newData = new Array[Double](numVertices * attr.size)
+      for (i <- 0 until oldToNew.size) {
+        for ((old, dest) <- oldToNew(i)) {
+          val base = old * attr.size
+          val destBase = dest * attr.size
+          for (j <- 0 until attr.size) {
+            newData(destBase + j) = aData(base + j)
+          }
+        }
+      }
+      newData
+    }
+
+    val (numVertices, newIndices, oldToNew) = reindex
+    Mesh(remapOld(numVertices, oldToNew) + (attr -> remapNew(numVertices, oldToNew)), newIndices, polygons)
   }
 }
