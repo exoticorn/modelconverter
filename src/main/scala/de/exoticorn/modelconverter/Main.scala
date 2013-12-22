@@ -9,14 +9,22 @@ import java.io.File
 
 object Main extends App {
   val root = Reader.load("test.fbx")
-  val mesh = Reader.toMesh(root, "Suzanne")
+  val mesh = Reader.toMesh(root, "Suzanne").toTriangles
   val positions = mesh.data(VertexAttributePosition)
-  val byteBuffer = ByteBuffer.allocate(8 + positions.size * 4 + mesh.indices.size * 2)
+  val normals = mesh.data(VertexAttributeNormal)
+  println((positions.size, normals.size))
+  assert(positions.size == normals.size)
+  val byteBuffer = ByteBuffer.allocate(8 + positions.size * 4 * 2 + mesh.indices.size * 2)
   byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
   byteBuffer.putInt(positions.size)
   byteBuffer.putInt(mesh.indices.size)
-  for (v <- positions) {
-    byteBuffer.putFloat(v.toFloat)
+  for (i <- 0 until (positions.size / 3)) {
+    byteBuffer.putFloat(positions(i * 3 + 0).toFloat)
+    byteBuffer.putFloat(positions(i * 3 + 1).toFloat)
+    byteBuffer.putFloat(positions(i * 3 + 2).toFloat)
+    byteBuffer.putFloat(normals(i * 3 + 0).toFloat)
+    byteBuffer.putFloat(normals(i * 3 + 1).toFloat)
+    byteBuffer.putFloat(normals(i * 3 + 2).toFloat)
   }
   for (i <- mesh.indices) {
     byteBuffer.putShort(i.toShort)

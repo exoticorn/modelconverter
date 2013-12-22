@@ -30,6 +30,10 @@ case class FbxNode(tpe: String, attributes: FbxArray, children: Seq[FbxNode]) {
   def apply(key: String): FbxNode = get(key).get
   def get(key: String): Option[FbxNode] = children find (_.tpe == key)
   def find(p: FbxNode => Boolean): Option[FbxNode] = children find p
+  def value: FbxValue = {
+    assert(attributes.size == 1)
+    attributes(0)
+  }
 }
 
 trait FbxArray {

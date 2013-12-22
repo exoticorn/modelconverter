@@ -19,26 +19,34 @@ object Reader {
     val objects = root("Objects")
     val model = (objects find (_.attributes(0).asString == s"Model::$name")).get
     val vertices = model("Vertices").attributes.asInstanceOf[FbxDoubleArray].array
-    val indexList = triangulateFbx(model("PolygonVertexIndex").attributes.asInstanceOf[FbxLongArray].array)
-    Mesh(Map(VertexAttributePosition -> vertices), indexList)
+    val (polygons, indexList) = toPolygons(model("PolygonVertexIndex").attributes.asInstanceOf[FbxLongArray].array)
+    val baseMesh = Mesh(
+      Map(
+        VertexAttributePosition -> vertices),
+      indexList,
+      polygons)
+
+    val normalNode = model("LayerElementNormal")
+    assert(normalNode("MappingInformationType").value == FbxString("ByPolygonVertex"))
+    assert(normalNode("ReferenceInformationType").value == FbxString("Direct"))
+    val normals = normalNode("Normals").attributes.asInstanceOf[FbxDoubleArray].array
+
+    baseMesh.addPerPolygonVertexAttribute(VertexAttributeNormal, normals, 0.05)
   }
 
-  def triangulateFbx(in: Array[Long]): Array[Int] = {
-    val builder = ArrayBuilder.make[Int]
+  def toPolygons(in: Array[Long]): (Polygons, Array[Int]) = {
+    val indicesBuilder = ArrayBuilder.make[Int]
+    val offsetsBuilder = ArrayBuilder.make[Int]
+    offsetsBuilder += 0
     var index = 0
     while (index < in.length) {
-      var a = in(index)
-      def inner(index: Int): Int = {
-        val b = in(index)
-        val c = in(index + 1)
-        builder += a.toInt
-        builder += b.toInt
-        builder += (if (c >= 0) c else -c - 1).toInt
-        if (c < 0) index + 2
-        else inner(index + 1)
+      val i = in(index)
+      indicesBuilder += (if (i < 0) -i - 1 else i).toInt
+      if (i < 0) {
+        offsetsBuilder += index + 1
       }
-      index = inner(index + 1)
+      index += 1
     }
-    builder.result()
+    (MixedPolygons(offsetsBuilder.result()), indicesBuilder.result())
   }
 }
