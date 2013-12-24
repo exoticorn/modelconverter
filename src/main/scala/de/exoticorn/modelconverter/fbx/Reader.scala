@@ -20,7 +20,7 @@ object Reader {
     val model = (objects find (_.attributes(0).asString == s"Model::$name")).get
     val vertices = model("Vertices").attributes.asInstanceOf[FbxDoubleArray].array
     val (polygons, indexList) = toPolygons(model("PolygonVertexIndex").attributes.asInstanceOf[FbxLongArray].array)
-    val baseMesh = Mesh(
+    var mesh = Mesh(
       Map(
         VertexAttributePosition -> vertices),
       indexList,
@@ -31,7 +31,17 @@ object Reader {
     assert(normalNode("ReferenceInformationType").value == FbxString("Direct"))
     val normals = normalNode("Normals").attributes.asInstanceOf[FbxDoubleArray].array
 
-    baseMesh.addPerPolygonVertexAttribute(VertexAttributeNormal, normals, 0.05)
+    mesh = mesh.addPerPolygonVertexAttribute(VertexAttributeNormal, normals, 0.05)
+
+    val uvNode = model("LayerElementUV")
+    assert(uvNode("MappingInformationType").value == FbxString("ByPolygonVertex"))
+    assert(uvNode("ReferenceInformationType").value == FbxString("IndexToDirect"))
+    val uvs = uvNode("UV").attributes.asInstanceOf[FbxDoubleArray].array
+    val uvIndices = uvNode("UVIndex").attributes.asInstanceOf[FbxLongArray].array
+
+    mesh = mesh.addPerPolygonVertexIndexAttribute(VertexAttributeUV, uvs, uvIndices)
+
+    mesh
   }
 
   def toPolygons(in: Array[Long]): (Polygons, Array[Int]) = {

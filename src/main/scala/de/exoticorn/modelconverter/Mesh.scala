@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 sealed class VertexAttribute(val size: Int)
 case object VertexAttributePosition extends VertexAttribute(3)
 case object VertexAttributeNormal extends VertexAttribute(3)
+case object VertexAttributeUV extends VertexAttribute(2)
 
 sealed trait Polygons {
   def vertexIndex(polygonIndex: Int): Int
@@ -26,6 +27,8 @@ case class MixedPolygons(offsets: Array[Int]) extends Polygons {
 
 case class Mesh(data: Map[VertexAttribute, Array[Double]], indices: Array[Int], polygons: Polygons) {
   assert(data.isDefinedAt(VertexAttributePosition))
+  val numVertices = data(VertexAttributePosition).size / 3
+  assert(data forall { case (a, d) => d.size / a.size == numVertices })
 
   def toTriangles: Mesh = {
     val builder = ArrayBuilder.make[Int]
@@ -39,6 +42,19 @@ case class Mesh(data: Map[VertexAttribute, Array[Double]], indices: Array[Int], 
     }
     val newIndices = builder.result()
     Mesh(data, newIndices, Triangles(newIndices.size / 3))
+  }
+
+  def addPerPolygonVertexIndexAttribute(attr: VertexAttribute, data: Array[Double], indices: Array[Long]): Mesh = {
+    val unpackedData = new Array[Double](indices.size * attr.size)
+    for {
+      i <- 0 until indices.size
+      srcBase = indices(i).toInt * attr.size
+      dstBase = i * attr.size
+      j <- 0 until attr.size
+    } {
+      unpackedData(dstBase + j) = data(srcBase + j)
+    }
+    addPerPolygonVertexAttribute(attr, unpackedData, 0)
   }
 
   def addPerPolygonVertexAttribute(attr: VertexAttribute, aData: Array[Double], tolerance: Double): Mesh = {
