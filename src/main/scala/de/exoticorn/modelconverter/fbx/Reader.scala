@@ -15,9 +15,25 @@ object Reader {
     Parser.parse(lexer)
   }
 
+  case class Objects(
+    models: Map[String, FbxNode],
+    textures: Map[String, FbxNode])
+
+  def readObjects(root: FbxNode): Objects = {
+    var models = Map.empty[String, FbxNode]
+    var textures = Map.empty[String, FbxNode]
+    for (obj <- root("Objects").children) {
+      obj match {
+        case FbxNode("Model", FbxString(name), _) => models += name -> obj
+        case FbxNode("Texture", FbxString(name), _) => textures += name -> obj
+        case _ =>
+      }
+    }
+    Objects(models, textures)
+  }
+
   def toMesh(root: FbxNode, name: String): Mesh = {
-    val objects = root("Objects")
-    val model = (objects find (_.attributes(0).asString == s"Model::$name")).get
+    val model = readObjects(root).models(name)
     val vertices = model("Vertices").attributes.asInstanceOf[FbxDoubleArray].array
     val (polygons, indexList) = toPolygons(model("PolygonVertexIndex").attributes.asInstanceOf[FbxLongArray].array)
     var mesh = Mesh(
@@ -42,6 +58,20 @@ object Reader {
     mesh = mesh.addPerPolygonVertexIndexAttribute(VertexAttributeUV, uvs, uvIndices)
 
     mesh
+  }
+
+  def materialForMesh(root: FbxNode, name: String): Material = {
+    val connections = root("Connections")
+    val textures = readObjects(root).textures
+    val textureConnections = connections.children map {
+      _.attributes.toValueArray.array match {
+        case Array(FbxString("OO"), FbxString(textureName), FbxString(`name`)) if textures.isDefinedAt(textureName) =>
+          Some(textures(textureName))
+        case _ => None
+      }
+    } collect { case Some(t) => t }
+    val filename = textureConnections.head("FileName").value.asString
+    Material(filename)
   }
 
   def toPolygons(in: Array[Long]): (Polygons, Array[Int]) = {

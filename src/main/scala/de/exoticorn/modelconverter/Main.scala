@@ -8,16 +8,19 @@ import java.nio.file.Files
 import java.io.File
 
 object Main extends App {
-  val root = Reader.load("tree.fbx")
-  val mesh = Reader.toMesh(root, "Tree").toTriangles
+  val root = Reader.load(args(0))
+  val mesh = Reader.toMesh(root, args(1)).toTriangles
+  val material = Reader.materialForMesh(root, args(1))
   val positions = mesh.data(VertexAttributePosition)
   val normals = mesh.data(VertexAttributeNormal)
   val uvs = mesh.data(VertexAttributeUV)
   val numVertices = positions.size / 3
-  val byteBuffer = ByteBuffer.allocate(8 + numVertices * 4 * (3 + 3 + 2) + mesh.indices.size * 2)
+  val textureName = material.texture.getBytes()
+  val byteBuffer = ByteBuffer.allocate(12 + textureName.size + numVertices * 4 * (3 + 3 + 2) + mesh.indices.size * 2)
   byteBuffer.order(ByteOrder.LITTLE_ENDIAN)
   byteBuffer.putInt(numVertices)
   byteBuffer.putInt(mesh.indices.size)
+  byteBuffer.putInt(textureName.size)
   for (i <- 0 until numVertices) {
     byteBuffer.putFloat(positions(i * 3 + 0).toFloat)
     byteBuffer.putFloat(positions(i * 3 + 1).toFloat)
@@ -31,5 +34,6 @@ object Main extends App {
   for (i <- mesh.indices) {
     byteBuffer.putShort(i.toShort)
   }
-  Files.write(new File("test.data").toPath(), byteBuffer.array())
+  byteBuffer.put(textureName)
+  Files.write(new File(args(2)).toPath(), byteBuffer.array())
 }

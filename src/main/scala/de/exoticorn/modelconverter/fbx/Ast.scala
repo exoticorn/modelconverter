@@ -26,7 +26,7 @@ case class FbxIdentifier(value: String) extends FbxValue {
   override def asString = value
 }
 
-case class FbxNode(tpe: String, attributes: FbxArray, children: Seq[FbxNode]) {
+class FbxNode(val tpe: String, val attributes: FbxArray, val children: Seq[FbxNode]) {
   def apply(key: String): FbxNode = get(key).get
   def get(key: String): Option[FbxNode] = children find (_.tpe == key)
   def find(p: FbxNode => Boolean): Option[FbxNode] = children find p
@@ -34,6 +34,12 @@ case class FbxNode(tpe: String, attributes: FbxArray, children: Seq[FbxNode]) {
     assert(attributes.size == 1)
     attributes(0)
   }
+}
+
+object FbxNode {
+  def apply(tpe: String, attributes: FbxArray, children: Seq[FbxNode]) = new FbxNode(tpe, attributes, children)
+  def unapplySeq(n: FbxNode): Option[Seq[Any]] =
+    Some(n.tpe +: n.attributes.toValueArray.array.toList)
 }
 
 trait FbxArray {
